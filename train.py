@@ -18,7 +18,7 @@ def train_npl(params, reg_func, seed):
     n,loc_x,scale_x,scale_nu,scale_eps,B,m,c,T = params
     theta_star = np.array([1,2])
     data, x = sample_observed_data_berkson(reg_func, int(n), loc_x, scale_x, scale_nu, scale_eps, theta_star, seed)
-    npl_ = npl(data,int(B),int(m), c, T, seed, lx=100, ly=100, prior=scale_nu)
+    npl_ = npl(data,int(B),int(m), c, T, seed, lx=10, ly=10, prior=scale_nu)
     t0 = time.time()
     npl_.draw_samples()
     t1 = time.time()
@@ -33,10 +33,10 @@ def reg_func(theta,x):
 def nonlinear_model(x, a, b):
     return (np.exp(a + b*x))/(1 + np.exp(a + b*x))
 
-n = np.array([1000])
+n = np.array([100])
 loc_x = np.array([0])
 scale_x = np.array([1])
-scale_nu = np.array([0.000001, 0.5, 1, 2]) # Specify different values of stadnard deviation of ME (try as many as you want)
+scale_nu = np.array([0.000001, 1, 2]) # Specify different values of stadnard deviation of ME (try as many as you want)
 scale_eps = np.array([0.2])  # True value of \sigma^2_{\epsilon}
 B = np.array([50])
 m = np.array([1])
@@ -72,7 +72,7 @@ if __name__=='__main__':
             stds = np.zeros((2,len(theta_star)))
 
             mses[0,:], stds[0,:] = mse(posterior_samples[:, :, p, r],theta_star)
-            mses[1,:], stds[1,:] = mse(coefs,theta_star)
+            mses[1,:] = np.asarray((coefs-theta_star))**2
 
             print(mses, stds, p, r)
             
