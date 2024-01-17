@@ -108,7 +108,7 @@ class npl():
       # Nstep: number of gradient steps
 
       key, subkey, key1, key2 = jax.random.split(key, num=3 + 1)
-      config.update("jax_enable_x64", False)
+      config.update("jax_enable_x64", True)
 
       # objective function to feed the optimizer
       def obj_fun(theta, Ds, xs, key):
