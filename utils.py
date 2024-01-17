@@ -43,7 +43,7 @@ def k_jax(x1,y1,x2,y2,lx,ly):
 
 def mse(theta,theta_star):
     se = np.asarray((theta-theta_star))**2
-    mse_ = np.mean(se,axis=1)
-    std_ = np.std(se,axis=1)
+    mse_ = np.mean(se,axis=0)
+    std_ = np.std(se,axis=0)
 
     return mse_, std_ 
