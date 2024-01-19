@@ -10,9 +10,26 @@ def sample_observed_data_berkson(reg_func, n,loc_x, scale_x, scale_nu, scale_eps
     # TODO: Sample multiple values of (x,y) for each w (group)
     # w = np.linspace(0,5,num=int(n/5))
     # w = np.repeat(w, 5)
-    w = stats.norm.rvs(loc=loc_x, scale=scale_x, size=(n,), random_state=seed+n+2) # covariates with Berkson ME
-    nu = stats.norm.rvs(loc=0, scale=scale_nu, size=(n,), random_state=seed+n) # ME
+    w = stats.norm.rvs(loc=loc_x, scale=scale_x, size=(n,), random_state=seed) # covariates with Berkson ME
+    nu = stats.norm.rvs(loc=0, scale=scale_nu, size=(n,), random_state=seed*2) # ME
     x = w + nu # True covariates
+    eps = stats.norm.rvs(loc=0, scale=scale_eps, size=(n,), random_state = seed*3) # Outcome variable (Y) error
+    #Y = theta[0] + theta[1]*x + theta[2]*x**2 + theta[3]*x**3 + eps    #theta[0] +
+    Y = reg_func(theta,x) + eps
+    X_train = w
+    Y_train = Y
+    data = np.zeros((n,2))
+    data[:,0] = X_train
+    data[:,1] = Y_train
+    # return observed data (with ME) and the true covariates x
+    return data, x
+
+def sample_observed_data_classical(reg_func, n,loc_x, scale_x, scale_nu, scale_eps, theta, seed):
+    """Function to sample observations with Berkson measurement error."""
+
+    x = stats.norm.rvs(loc=loc_x, scale=scale_x, size=(n,), random_state=seed+n+2) # covariates with Berkson ME
+    nu = stats.norm.rvs(loc=0, scale=scale_nu, size=(n,), random_state=seed+n) # ME
+    w = x + nu # noisy observed covariates
     eps = stats.norm.rvs(loc=0, scale=scale_eps, size=(n,), random_state = seed+n+3) # Outcome variable (Y) error
     #Y = theta[0] + theta[1]*x + theta[2]*x**2 + theta[3]*x**3 + eps    #theta[0] +
     Y = reg_func(theta,x) + eps
