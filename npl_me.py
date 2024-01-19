@@ -12,7 +12,12 @@ import scipy.odr as odr
 from jax.example_libraries import optimizers
 import math
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 from utils import k_jax
+
+# Define a nonlinear model function 
+def nonlinear_model(x, a, b):
+    return (np.exp(a + b*x))/(1 + np.exp(a + b*x))
 
 # NPL class
 class npl():
@@ -30,7 +35,7 @@ class npl():
         prior: prior value for measurement error std
     """
 
-    def __init__(self, data, B, m, c, T, seed, lx, ly, prior):
+    def __init__(self, data, B, m, c, T, seed, lx, ly, prior, me_type):
         self.B = int(B)
         self.m = m
         self.T = int(T)  # truncation limit for DP sample approximation
@@ -45,9 +50,10 @@ class npl():
             self.lx = np.sqrt((1/2)*np.median(distance.cdist(self.data[:,0].reshape((self.n,1)),self.data[:,0].reshape((self.n,1)),'sqeuclidean')))
         if self.ly == -1:
             self.ly = np.sqrt((1/2)*np.median(distance.cdist(self.data[:,1].reshape((self.n,1)),self.data[:,1].reshape((self.n,1)),'sqeuclidean')))
-        self.prior = prior
+        self.prior = prior   # prior is either (2, ) for classical or (1, ) for Berkson
         self.w_groups, self.group_sizes = np.unique(self.data[:,0], return_counts=True)
         self.num_groups = len(self.w_groups)
+        self.me_type = me_type
         
 
     def draw_single_sample(self, weights, x_tilde, key):
@@ -90,10 +96,16 @@ class npl():
         #weights = np.repeat(weights[:, np.newaxis, :], self.num_groups, axis=1) # BxnxT
 
         # Sample pseudo-data from prior centering measure
-        x_tilde = multivariate_normal.rvs(self.w_groups, (self.prior**2)*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.seed) # shape BxTxn self.prior
-        # x_tilde = multivariate_t.rvs(df=2, loc=self.w_groups, size=(self.B,self.T), random_state=self.seed) # shape BxTxn
-        if np.isnan(x_tilde).any():
-            print("NaN values encountered in x_tilde!")
+        if self.me_type == 'berkson':
+          x_tilde = multivariate_normal.rvs(self.w_groups, (self.prior**2)*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.seed) # shape BxTxn self.prior
+          # x_tilde = multivariate_t.rvs(df=2, loc=self.w_groups, size=(self.B,self.T), random_state=self.seed) # shape BxTxn
+        elif self.me_type == 'classical':   # Here I have assumed prior mean for x is 0 for simplicity
+          post_var = 1/((1/self.prior[0]**2) + (1/self.prior[1]**2))   
+          x_tilde = multivariate_normal.rvs(post_var*(self.w_groups/(self.prior[0]**2)), post_var*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.seed)
+        else: 
+           print('Unknown measurement error type!')
+           exit()
+           
 
         key = jax.random.PRNGKey(113)
         # Split random key into B keys
@@ -101,6 +113,32 @@ class npl():
         # vmap over B bootstrap iterations so each term in the vectorisation is of size (n, T) for weights and (T, n) for x_tilde
         samples = vmap(self.draw_single_sample, in_axes=(0,0,0))(weights, x_tilde, jnp.array(subkeys))
         self.sample = np.array(samples)
+
+    def find_initial_params(self):
+        """Function to find optimisation starting point"""
+        
+        def sample_theta_init(rng):
+          param_range = (jnp.array([-5, -5, -10]), jnp.array([5, 5, -2]))
+          lower, upper = param_range
+          params = jax.random.uniform(rng, minval=lower, maxval=upper, shape=lower.shape)
+          return params  
+
+        n_initial_locations = 500
+        n_optimized_locations = 1
+
+        rng = jax.random.PRNGKey(2)
+        rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
+        init_thetas = vmap(sample_theta_init)(jnp.array(rng_inputs))
+        rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
+
+        init_losses = []
+        for t in init_thetas:
+          init_losses.append(self.loss(rng,t, self.data, self.data[:,0]))
+
+        rng, *rng_inputs = jax.random.split(rng, num=n_optimized_locations + 1)
+        best_init_params = init_thetas[np.argsort(np.asarray(init_losses))[:n_optimized_locations]]
+
+        return best_init_params 
 
     def minimise_MMD(self, data, weights, x_tilde, key, Nstep=700, eta=0.01):  #0.1
       """Function to minimise the MMD using adam optimisation from jax"""
@@ -155,10 +193,15 @@ class npl():
         return D, xs2.flatten()
 
       # Initialization of theta for optimisation: here you can start from a fixed point or uniformly sample from a range of values
-      #params = jnp.array([0.,0.,-2.]) # last parameter is variance of error on y and we have reparametrised it
-      param_range = (jnp.array([-2., -2., -10.]), jnp.array([5., 5., -2.]))
+      #params = jnp.array([0.,4.,-2.]) # last parameter is variance of error on y and we have reparametrised it
+      param_range = (jnp.array([-1., -1., -10.]), jnp.array([4., 4., -2.]))
       lower, upper = param_range
       params = jax.random.uniform(subkey, minval=lower, maxval=upper, shape=(self.p,))
+      #params = self.find_initial_params()[0]
+      # initial_guess = [0, 4]
+      # params, _ = curve_fit(nonlinear_model, self.data[:,0], self.data[:,1], p0=initial_guess)
+      # params = jnp.concatenate([jnp.array(params), jnp.array([-2])])
+      #print(params)
       opt_state = opt_init(params) # initialise theta at params
 
       smallest_loss = 1000000
