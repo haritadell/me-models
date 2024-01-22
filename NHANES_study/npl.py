@@ -19,7 +19,7 @@ import math
 #jax.local_device_count() 
 
 # NPL class
-class npl():
+class npl_class():
     """This class contains functions to perform NPL inference for any of the models in models.py. 
     The user supplies parameters:
         X: Data set 
@@ -85,10 +85,10 @@ class npl():
           return B, j+1
 
         Z = jax.lax.scan(fn_to_scan, jnp.zeros((N,K+1)), jnp.arange(K-1))[0]
-        X = make_design_matrix(xsample) # X is Nx3, Zs are NxK (22)
+        #X = make_design_matrix(xsample) # X is Nx3, Zs are NxK (22)
         y = jax.random.multivariate_normal(rng, jnp.matmul(Z,u) , var_eps*jnp.eye(N)) 
-        
         kyy = k_jax(xsample,y,xsample,y, self.lx, self.ly) 
+        print(y[0:10], 'y')
         kxy = k_jax(xsample,y,D[:,0],D[:,1],self.lx, self.ly) 
         diag_elements = jnp.diag_indices_from(kyy)
         kyy = kyy.at[diag_elements].set(jnp.repeat(0,N))
@@ -102,8 +102,8 @@ class npl():
         """Draws B samples from the nonparametric posterior"""
         dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), np.array([1])])
         weights = dirichlet.rvs(dir_params, size=(self.B,self.n), random_state=self.seed+10)
-        post_var = 1/((1/self.prior**2) + (1/2))   
-        x_tilde = multivariate_normal.rvs(post_var*(self.data[:,0]/(2)), post_var*np.eye(self.n), size=(self.B,self.T), random_state=self.seed)
+        post_var = 1/((1/self.prior**2) + (1/1))   
+        x_tilde = multivariate_normal.rvs(post_var*(self.data[:,0]/(1)), post_var*np.eye(self.n), size=(self.B,self.T), random_state=self.seed)
         key = jax.random.PRNGKey(113)
         key, *subkeys = jax.random.split(key, num=self.B+1)
         samples = vmap(self.draw_single_sample, in_axes=(0,0,0,0))(weights, x_tilde, jnp.array(subkeys), jnp.arange(self.B)) # vmap over B so each term in the parallelisation is of size (n, T) for weights and (T, n) for x_tilde
@@ -155,7 +155,7 @@ class npl():
 
         return D, xs2.flatten() 
         
-      # Explain the initialisation I do here in terms of the pseudo inverse for Y = X / explain here and in paper! Make sure it makes sense
+      # Explain the initialisation I do here in terms of the pseudo inverse for Y = X / explain here and in paper! 
       inv = jnp.linalg.pinv(self.Z_data)
       u_init = jnp.matmul(inv,self.data[:,0])
       params = jnp.concatenate([u_init,jnp.array([-10.])]) 
