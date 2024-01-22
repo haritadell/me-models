@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import jax.numpy as jnp
+from jax import vmap 
 
 def process_csv(path_to_csv_file): # data is already scaled
   df = pd.read_csv(path_to_csv_file)
@@ -39,3 +40,18 @@ def Bbasis(x,knots):
     B = B.at[inds,j+1].set(-(resc_x**2)+resc_x+1/2)
     B = B.at[inds,j+2].set((resc_x**2)/2)
   return B
+
+def sqeuclidean_distance(x, y):
+    return jnp.sum((x-y)**2)
+
+def rbf_kernel(x1, y1, x2, y2, lx, ly):
+    KX = jnp.exp( -(1/(2*lx**2)) * sqeuclidean_distance(x1, x2))
+    KY = jnp.exp( -(1/(2*ly**2)) * sqeuclidean_distance(y1, y2))
+    return KX*KY
+
+def k_jax(x1,y1,x2,y2,lx,ly):
+    """Gaussian kernel compatible with JAX library"""
+
+    mapx1 = vmap(lambda x1, y1, x2, y2: rbf_kernel(x1, y1, x2, y2, lx, ly), in_axes=(0, 0, None, None), out_axes=0)
+    mapx2 = vmap(lambda x1, y1, x2, y2: mapx1(x1, y1, x2, y2), in_axes=(None, None, 0, 0), out_axes=1)
+    K = mapx2(x1, y1, x2, y2)
