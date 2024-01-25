@@ -55,3 +55,5 @@ def k_jax(x1,y1,x2,y2,lx,ly):
     mapx1 = vmap(lambda x1, y1, x2, y2: rbf_kernel(x1, y1, x2, y2, lx, ly), in_axes=(0, 0, None, None), out_axes=0)
     mapx2 = vmap(lambda x1, y1, x2, y2: mapx1(x1, y1, x2, y2), in_axes=(None, None, 0, 0), out_axes=1)
     K = mapx2(x1, y1, x2, y2)
+
+    return K
