@@ -1,7 +1,7 @@
 # NPL.py
 import os
 #os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=10"
-from utils import k_jax, make_design_matrix
+from utils import k_jax, make_design_matrix, k_comp
 import itertools
 import numpy as np
 from scipy.stats import dirichlet, multivariate_normal, multivariate_t
@@ -16,7 +16,6 @@ import scipy.odr as odr
 from jax.example_libraries import optimizers
 import math
 
-#jax.local_device_count() 
 
 # NPL class
 class npl_class():
@@ -32,15 +31,12 @@ class npl_class():
     """
     
     def __init__(self, data, B, m, c, T, seed, knots, lx, ly, prior):
-        #self.model = model
         self.B = int(B)  
         self.m = m
-        self.T = int(T) # truncation limit for DP sample approximation
-        self.c = c# DP concentration parameter
+        self.T = int(T) 
+        self.c = c
         self.data = data  
-        #self.n, self.d = self.data[:,0].shape {}
-        self.n = len(self.data[:,0])
-        #self.d = 1  
+        self.n = len(self.data[:,0]) 
         self.seed = seed
         self.prior = prior
         self.lx = lx
@@ -62,7 +58,7 @@ class npl_class():
           return B, j+1
         self.Z_data = jax.lax.scan(fn_to_scan, jnp.zeros((self.n,self.K+1)), jnp.arange(self.K-1))[0]  
 
-    def draw_single_sample(self, weights, x_tilde, key, ind): #, x_stars): #
+    def draw_single_sample(self, weights, x_tilde, key, ind): 
         """ Draws a single sample from the nonparametric posterior specified via
         the model and the data X"""
         theta_j = self.minimise_MMD(self.data, weights, x_tilde, key, ind)
@@ -85,11 +81,10 @@ class npl_class():
           return B, j+1
 
         Z = jax.lax.scan(fn_to_scan, jnp.zeros((N,K+1)), jnp.arange(K-1))[0]
-        #X = make_design_matrix(xsample) # X is Nx3, Zs are NxK (22)
+        X = make_design_matrix(xsample) # X is Nx3, Zs are NxK (22)
         y = jax.random.multivariate_normal(rng, jnp.matmul(Z,u) , var_eps*jnp.eye(N)) 
-        kyy = k_jax(xsample,y,xsample,y, self.lx, self.ly) 
-        print(y[0:10], 'y')
-        kxy = k_jax(xsample,y,D[:,0],D[:,1],self.lx, self.ly) 
+        kyy = k_jax(xsample,y,xsample,y, self.lx, self.ly)
+        kxy = k_jax(xsample,y,D[:,0],D[:,1],self.lx, self.ly)
         diag_elements = jnp.diag_indices_from(kyy)
         kyy = kyy.at[diag_elements].set(jnp.repeat(0,N))
         sum1 = jnp.sum(kyy)
@@ -103,17 +98,49 @@ class npl_class():
         dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), np.array([1])])
         weights = dirichlet.rvs(dir_params, size=(self.B,self.n), random_state=self.seed+10)
         post_var = 1/((1/self.prior**2) + (1/1))   
-        x_tilde = multivariate_normal.rvs(post_var*(self.data[:,0]/(1)), post_var*np.eye(self.n), size=(self.B,self.T), random_state=self.seed)
+        post_mean = self.prior**2/(self.prior**2 + 1)*4 + 1/(1 + self.prior**2)*self.data[:,0]
+        x_tilde = multivariate_normal.rvs(post_mean, post_var*np.eye(self.n), size=(self.B,self.T), random_state=self.seed)
         key = jax.random.PRNGKey(113)
         key, *subkeys = jax.random.split(key, num=self.B+1)
         samples = vmap(self.draw_single_sample, in_axes=(0,0,0,0))(weights, x_tilde, jnp.array(subkeys), jnp.arange(self.B)) # vmap over B so each term in the parallelisation is of size (n, T) for weights and (T, n) for x_tilde
         self.sample = np.array(samples) 
     
+    def best_init_params(self,i):
+        """Function to find optimisation starting point"""
+        
+        def sample_theta_init(rng):
+          lower_b = jnp.concatenate([(0.)*jnp.ones(11),jnp.array([-10])]) 
+          upper_b = jnp.concatenate([(5.)*jnp.ones(11),jnp.array([-1])])
+          param_range = (lower_b, upper_b) 
+          lower, upper = param_range
+          params = jax.random.uniform(rng, minval=lower, maxval=upper, shape=lower.shape)
+          return params  
+
+        n_initial_locations = 2000
+        n_optimized_locations = 1
+
+        rng = jax.random.PRNGKey((i+1)**3)
+        rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
+        init_thetas = vmap(sample_theta_init)(jnp.array(rng_inputs))
+        rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
+        
+        K = 10
+        init_losses = []
+        for t in init_thetas:
+            rng, subrng = jax.random.split(rng)
+            inds = jax.random.choice(rng, a=self.n, shape=(self.n,), p=(1/self.n)*jnp.ones(self.n))
+            xsample = jnp.take(a=self.data[:,0], indices=inds)
+            init_losses.append(self.loss(subrng,t,self.data,self.data[:,0])) #xsample
+
+        rng, *rng_inputs = jax.random.split(rng, num=n_optimized_locations + 1)
+        best_init_params = init_thetas[jnp.argsort(jnp.asarray(init_losses))[:n_optimized_locations]]
+
+        return best_init_params
 
     def minimise_MMD(self, data, weights, x_tilde, key, ind, Nstep=100, eta=0.5): 
       """Function to minimise the MMD using adam optimisation from jax"""
-      key, subkey = jax.random.split(key)
-      config.update("jax_enable_x64", False)
+      key, subkey, key1 = jax.random.split(key, num=3)
+      config.update("jax_enable_x64", True)
       def obj_fun(theta, Ds, xs, key):
         return self.loss(key,theta,Ds,xs)
             
@@ -127,9 +154,6 @@ class npl_class():
         value, grad = grad_fn(get_params(opt_state), Ds, xs, key)
         opt_state = opt_update(step, grad, opt_state) 
         return value, opt_state
-        
-      key1 = jax.random.PRNGKey(11)
-      key2 = jax.random.PRNGKey(13)
 
       def take_sample(w, x, y, key):
         """Add text here"""
@@ -159,25 +183,23 @@ class npl_class():
       inv = jnp.linalg.pinv(self.Z_data)
       u_init = jnp.matmul(inv,self.data[:,0])
       params = jnp.concatenate([u_init,jnp.array([-10.])]) 
-      print(params)
 
       smallest_loss = 1000000
       K = 10 # parameter as in Sarkar et al.
 
       n_optimized_locations = 1 
       list_of_thetas = jnp.zeros((n_optimized_locations,12)) # Initialise list of thetas depending on the number of locations   
+
+      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], subkey)
+      
       for j in range(n_optimized_locations):
-        opt_state = opt_init(params)
+        opt_state = opt_init(params)   # [j,:]
         smallest_loss = 1000
         best_theta = get_params(opt_state)
         for i in range(Nstep):    
-          key1, subkey = jax.random.split(key1)
-          DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], subkey)
-          
           # update 
-          key2, subkey = jax.random.split(key2)
-          value, opt_state = step(next(itercount), opt_state, DataSet, xsample, subkey) #
-
+          key1, subkey1 = jax.random.split(key1)
+          value, opt_state = step(next(itercount), opt_state, DataSet, xsample, subkey1) #
           # Check if the loss is getting smaller, if it is then update best theta 
           pred =  value < smallest_loss
           def true_func(args):
@@ -192,19 +214,8 @@ class npl_class():
           smallest_loss, best_theta = jax.lax.cond(pred, true_func, false_func, [value, smallest_loss, best_theta, opt_state])
           print(best_theta)  
               
-    #     list_of_thetas = list_of_thetas.at[j,:].set(best_theta)
-
-    #   DataSet, x_to_use = take_sample(weights,x_tilde,self.data[:,1],key1)  
-    #   losses = []
-    #   seed = 12
-    #   rng = jax.random.PRNGKey(seed)
-    #   rng, *rng_inputs = jax.random.split(rng, num=n_optimized_locations + 1)
-  
-    #   for l,t in enumerate(list_of_thetas):
-    #      losses.append(self.loss(jnp.array(rng_inputs)[l,:],t,DataSet, DataSet[:,0]))
-    #   ind_ = jnp.argmin(jnp.asarray(losses)) # get the index of smallest loss 
-    #   best_theta = list_of_thetas[ind]    
-    #   print(ind_)  
-      a_mmd = best_theta[0:-1] #get_params(opt_state)[0] 
+        list_of_thetas = list_of_thetas.at[j,:].set(best_theta)
+ 
+      a_mmd = best_theta[:-1] 
       
       return  jnp.array([a_mmd])
