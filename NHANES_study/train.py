@@ -15,7 +15,7 @@ def train_(params):
     min_knots = min(-3,min(start_xs)-range_expand*range_start_xs)
     max_knots = max(3,max(start_xs)+range_expand*range_start_xs)
     knots = create_knots(min_knots, max_knots, 10) # create knots as from Sarkar et al.
-    npl_ = npl_class(data,int(B),int(m), c, T, seed, knots, lx=10, ly=100, prior=1.0)
+    npl_ = npl_class(data,int(B),int(m), c, T, seed, knots, lx=10, ly=100, prior=2)  
     t0 = time.time()
     npl_.draw_samples()
     t1 = time.time()
