@@ -14,7 +14,7 @@ theta_star = np.array([1,2])
 
 mses = np.zeros((num_realizations, 2, len(theta_star)))
 stds = np.zeros((num_realizations, 2, len(theta_star)))
-count = 0
+counts = np.zeros((len(theta_star)))
 
 def nonlinear_model(x, a, b):
     return (np.exp(a + b*x))/(1 + np.exp(a + b*x))
@@ -31,17 +31,19 @@ for r in range(num_realizations):
     mses[r, 0, :] = np.asarray((mean_boot_sample - theta_star)**2)
     mses[r, 1, :] = np.asarray((ls_estimator - theta_star)**2)
 
-    # Credible interval
-    lower_bound = np.percentile(boot_sample[:, 1], (1 - confidence_level) / 2 * 100)
-    upper_bound = np.percentile(boot_sample[:, 1], (1 + confidence_level) / 2 * 100)
-    #print(lower_bound, upper_bound)
-
-    if lower_bound <= theta_star[1] <= upper_bound:
-        count += 1
+    # Credible interval 
+    for i in range(len(theta_star)):
+        count = 0
+        lower_bound = np.percentile(boot_sample[:, i], (1 - confidence_level) / 2 * 100)
+        upper_bound = np.percentile(boot_sample[:, i], (1 + confidence_level) / 2 * 100)
+        if lower_bound <= theta_star[i] <= upper_bound:
+            count += 1
+        counts[i] = count
       
 # Calculate the coverage probability
-coverage_probability = count / num_realizations
+coverage_probabilities = counts / num_realizations
 mses_over_runs = np.mean(mses, axis=0)
-print(f"Coverage Probability for ME std {scale_nu}: {coverage_probability * 100}%")
+print(f"Coverage Probability for theta_1 for ME std {scale_nu}: {coverage_probabilities[0] * 100}%")
+print(f"Coverage Probability for theta_2 for ME std {scale_nu}: {coverage_probabilities[1] * 100}%")
 print(f"Mean Squared error for Robust-MEM: {mses_over_runs[0, :]}")
 print(f"Mean Squared error for Least Squares: {mses_over_runs[1, :]}")
