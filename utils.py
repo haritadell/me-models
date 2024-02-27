@@ -1,7 +1,10 @@
 import numpy as np
 import jax.numpy as jnp
 from jax import vmap
+import jax.numpy.linalg as la
 import scipy.stats as stats
+from sklearn.linear_model import LinearRegression
+import scipy.odr as odr
 
 def sample_observed_data_berkson(reg_func, n,loc_x, scale_x, scale_nu, scale_eps, theta, seed):
     """Function to sample observations with Berkson measurement error."""
@@ -64,3 +67,47 @@ def mse(theta,theta_star):
     std_ = np.std(se,axis=0)
 
     return mse_, std_ 
+
+def tls(X,y):
+    X_ = X - jnp.mean(X)
+    y_ = y - jnp.mean(y)
+    if X_.ndim == 1: 
+        d=1
+        X_ = X_.reshape((len(X_),d))
+    else:
+        d = jnp.array(X_).shape[1]
+    
+    Z = jnp.vstack((X_.T,y_)).T #Z is (n,2)
+    U, s, Vt = la.svd(Z, full_matrices=True)
+    
+    V = Vt.T
+    Vxy = V[:d,d:]
+    Vyy = V[d:,d:]
+    a_tls = - Vxy  / Vyy # total least squares soln
+    b_tls = jnp.mean(y) - a_tls*jnp.mean(X)
+    
+    return jnp.array([a_tls[0], b_tls[0]]) 
+
+
+def run_odr(data):
+  lr = LinearRegression(fit_intercept=True)
+  lr.fit(data[:,0].reshape(-1, 1), data[:,1].reshape(-1, 1))
+  ww = lr.coef_
+  bb = lr.intercept_
+  ols_params = np.array([ww[0][0],bb[0]]) 
+  def f(B, x):
+    return B[0]*(x) + B[1]
+  linear = odr.Model(f)
+  mydata = odr.Data(data[:,0], data[:,1])
+  myodr = odr.ODR(mydata, linear, beta0=[ww[0][0],bb[0]]) 
+  myoutput = myodr.run()
+  return myoutput
+
+def run_ols(data):
+  lr = LinearRegression(fit_intercept=True)
+  lr.fit(data[:,0].reshape(-1, 1), data[:,1].reshape(-1, 1))
+  ww = lr.coef_
+  bb = lr.intercept_
+  ols_params = np.array([ww[0][0],bb[0]])
+  return ols_params
+

@@ -7,7 +7,7 @@ num_realizations = 100
 seed = 12
 folder_path = '/dcs/pg23/u1604520/mem/results/exponential_classical_unifstart/'
 
-scale_nu = 2.0 #0.000001 #1.0 #2.0
+scale_nu = 1.0 #0.000001 #1.0 #2.0
 c = 100
 n = 200
 B = 500
