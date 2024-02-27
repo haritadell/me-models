@@ -15,10 +15,12 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from utils import k_jax
 
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
+
 # Define a nonlinear model function 
 def nonlinear_model(x, a, b):
-    return (np.exp(a + b*x))/(1 + np.exp(a + b*x))
-
+    return (np.exp(a + b*x))/(1 + np.exp(a + b*x)) # a + b*x + c*x**2
+ 
 # NPL class
 class npl():
     """This class contains functions to perform NPL inference for any of the models in models.py.
@@ -35,7 +37,7 @@ class npl():
         prior: prior value for measurement error std
     """
 
-    def __init__(self, data, B, m, c, T, seed, lx, ly, prior, me_type):
+    def __init__(self, data, B, m, c, T, p, seed, lx, ly, prior, me_type):
         self.B = int(B)
         self.m = m
         self.T = int(T)  # truncation limit for DP sample approximation
@@ -43,7 +45,7 @@ class npl():
         self.data = data
         self.n = len(self.data[:,0]) # number of observations
         self.seed = seed
-        self.p = 3 # number of unknown parameters
+        self.p = p # number of unknown parameters
         self.lx = lx
         self.ly = ly
         if self.lx == -1:
@@ -69,7 +71,7 @@ class npl():
 
         var_eps = jnp.exp(theta[-1])   # reparametrisation to ensure variance of residual error is positive
         N = len(xsample) # be careful with the sizes!
-        #y = jax.random.multivariate_normal(rng, theta[0] + theta[1]*xsample + theta[2]*xsample**2 + theta[3]*xsample**3, var_eps*jnp.eye(N)) # draw samples from the model
+        #y = jax.random.multivariate_normal(rng, theta[0] + theta[1]*xsample + theta[2]*xsample**2, var_eps*jnp.eye(N)) # draw samples from the model
         y = jax.random.multivariate_normal(rng, (jnp.exp(theta[0] + theta[1]*xsample))/(1 + jnp.exp(theta[0] + theta[1]*xsample)), var_eps*jnp.eye(N))
         kyy = k_jax(xsample,y,xsample,y, self.lx, self.ly)
         kxy = k_jax(xsample,y,D[:,0],D[:,1],self.lx, self.ly)
@@ -194,13 +196,14 @@ class npl():
 
       # Initialization of theta for optimisation: here you can start from a fixed point or uniformly sample from a range of values
       #params = jnp.array([0.,4.,-2.]) # last parameter is variance of error on y and we have reparametrised it
+      # param_range = (jnp.array([-1., -1., -1., -10.]), jnp.array([4., 4., 4., -2.]))
       param_range = (jnp.array([-1., -1., -10.]), jnp.array([4., 4., -2.]))
       lower, upper = param_range
       params = jax.random.uniform(subkey, minval=lower, maxval=upper, shape=(self.p,))
-      #params = self.find_initial_params()[0]
-      # initial_guess = [0, 4]
+      # params = self.find_initial_params()[0]
+      # initial_guess = [0, 0, 0]
       # params, _ = curve_fit(nonlinear_model, self.data[:,0], self.data[:,1], p0=initial_guess)
-      # params = jnp.concatenate([jnp.array(params), jnp.array([-2])])
+      # params = jnp.concatenate([jnp.array(params), jnp.array([-5])])
       #print(params)
       opt_state = opt_init(params) # initialise theta at params
 
@@ -222,7 +225,7 @@ class npl():
             smallest_loss = value
             best_theta = get_params(opt_state)
             return smallest_loss, best_theta
-        def false_func(args): # if pred is false don't update smallest_loss and best_theta
+        def false_func(args): # if pred is false don't update smallest_loss and best_thet
             value, smallest_loss, best_theta, opt_state = args[0], args[1], args[2], args[3]
             smallest_loss = jnp.array(smallest_loss, dtype='float64')
             return smallest_loss, best_theta
