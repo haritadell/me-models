@@ -104,7 +104,8 @@ class npl():
           # x_tilde = multivariate_t.rvs(df=2, loc=self.w_groups, size=(self.B,self.T), random_state=self.generator) # shape BxTxn
         elif self.me_type == 'classical':   # Here I have assumed prior mean for x is 0 for simplicity
           post_var = 1/((1/self.prior[0]**2) + (1/self.prior[1]**2))   
-          x_tilde = multivariate_normal.rvs(post_var*(self.w_groups/(self.prior[0]**2)), post_var*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.generator)
+          post_mean = 0*(self.prior[0]**2)/(self.prior[1]**2 + self.prior[0]**2) + (self.data[:,0]*(self.prior[1]**2)/(self.prior[1]**2 + self.prior[0]**2))
+          x_tilde = multivariate_normal.rvs(post_mean, post_var*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.generator)
         else: 
            print('Unknown measurement error type!')
            exit()
