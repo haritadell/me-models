@@ -29,17 +29,18 @@ class npl_tls():
         self.seed = seed # random seed            
         self.prior = prior
         self.tls_value_from_data = tls(self.data[:,0],self.data[:,1]) # TLS estimator using the observed data
+        self.generator = np.random.default_rng(seed=self.seed)
 
     def draw_single_sample(self,i): 
         """ Draws a single sample from the NPL posterior"""
 
         dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), np.array([1])]) # parameters for sampling weights from the Dirichlet distribution
-        weights = dirichlet.rvs(dir_params, size=(self.n,), random_state=self.seed+i) # (1,101) ? sample weights
+        weights = dirichlet.rvs(dir_params, size=(self.n,), random_state=self.generator) # (1,101) ? sample weights
         weights_resized = jnp.sqrt((1/self.n)*jnp.transpose(weights).flatten()) # sqrt of weights #.repeat(self.n)
         #x_tilde = multivariate_t.rvs(loc=self.data[:,0], df=3, size=(self.T), random_state=self.seed+i).reshape((self.T,self.n)) # sample x_tilde from the Student-t
         
         post_var = 1/((1/self.prior[0]**2) + (1/self.prior[1]**2))   
-        x_tilde = multivariate_normal.rvs(post_var*(self.data[:,0]/(self.prior[0]**2)), post_var*np.eye(self.n), size=(self.T), random_state=self.seed).reshape((self.T,self.n))
+        x_tilde = multivariate_normal.rvs(post_var*(self.data[:,0]/(self.prior[0]**2)), post_var*np.eye(self.n), size=(self.T), random_state=self.generator).reshape((self.T,self.n))
         
         new_data = jnp.zeros((self.T*self.n, 2)) # Initialise matrix for weighted synthetic dataset
         new_data = new_data.at[:,0].set(x_tilde.flatten()*weights_resized[:(self.n*self.T)]) 
@@ -75,7 +76,7 @@ class npl_tls():
         results_odr = np.zeros((self.B,2)) 
         results_ols = np.zeros((self.B,2))
 
-        temp = Parallel(n_jobs=-1, backend= 'loky')(delayed(self.draw_single_sample)(i) for i in tqdm(range(self.B)))
+        temp = Parallel(n_jobs=-1, backend= 'loky')(delayed(self.draw_single_sample)(i) for i in range(self.B))
         for i in range(self.B):
             results_odr[i,:] = temp[i][0]
             results_ols[i,:] = temp[i][1]
