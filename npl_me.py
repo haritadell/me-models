@@ -56,6 +56,7 @@ class npl():
         self.w_groups, self.group_sizes = np.unique(self.data[:,0], return_counts=True)
         self.num_groups = len(self.w_groups)
         self.me_type = me_type
+        self.generator = np.random.default_rng(seed=self.seed)
         
 
     def draw_single_sample(self, weights, x_tilde, key):
@@ -92,24 +93,24 @@ class npl():
           self.seed += 1
           group_size = self.group_sizes[i]
           dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), np.ones(group_size)])
-          weights_i = dirichlet.rvs(dir_params, size=(self.B,), random_state=self.seed)
+          weights_i = dirichlet.rvs(dir_params, size=(self.B,), random_state=self.generator)
           weights[:,i,:] = weights_i
         
         #weights = np.repeat(weights[:, np.newaxis, :], self.num_groups, axis=1) # BxnxT
 
         # Sample pseudo-data from prior centering measure
         if self.me_type == 'berkson':
-          x_tilde = multivariate_normal.rvs(self.w_groups, (self.prior**2)*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.seed) # shape BxTxn self.prior
-          # x_tilde = multivariate_t.rvs(df=2, loc=self.w_groups, size=(self.B,self.T), random_state=self.seed) # shape BxTxn
+          x_tilde = multivariate_normal.rvs(self.w_groups, (self.prior**2)*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.generator) # shape BxTxn self.prior
+          # x_tilde = multivariate_t.rvs(df=2, loc=self.w_groups, size=(self.B,self.T), random_state=self.generator) # shape BxTxn
         elif self.me_type == 'classical':   # Here I have assumed prior mean for x is 0 for simplicity
           post_var = 1/((1/self.prior[0]**2) + (1/self.prior[1]**2))   
-          x_tilde = multivariate_normal.rvs(post_var*(self.w_groups/(self.prior[0]**2)), post_var*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.seed)
+          x_tilde = multivariate_normal.rvs(post_var*(self.w_groups/(self.prior[0]**2)), post_var*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.generator)
         else: 
            print('Unknown measurement error type!')
            exit()
            
 
-        key = jax.random.PRNGKey(113)
+        key = jax.random.PRNGKey(self.seed)
         # Split random key into B keys
         key, *subkeys = jax.random.split(key, num=self.B+1) #B,
         # vmap over B bootstrap iterations so each term in the vectorisation is of size (n, T) for weights and (T, n) for x_tilde
@@ -128,7 +129,7 @@ class npl():
         n_initial_locations = 500
         n_optimized_locations = 1
 
-        rng = jax.random.PRNGKey(2)
+        rng = jax.random.PRNGKey(self.seed)
         rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
         init_thetas = vmap(sample_theta_init)(jnp.array(rng_inputs))
         rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
@@ -147,7 +148,8 @@ class npl():
       # eta: learning rate
       # Nstep: number of gradient steps
 
-      key, subkey, key1, key2 = jax.random.split(key, num=3 + 1)
+      key, key1, key2, key3 = jax.random.split(key, num=3 + 1)
+      del key
       config.update("jax_enable_x64", True)
 
       # objective function to feed the optimizer
@@ -185,8 +187,6 @@ class npl():
 
         key, *rng_inputs = jax.random.split(key, self.num_groups+1)
         xs1, xs2 = vmap(sample, in_axes=(0,1,0))(w,x,jnp.array(rng_inputs)) # vmap over the second dimension of size n
-        # print(jnp.isnan(xs1).sum())
-        # print(jnp.isnan(xs2).sum())
         y = y.repeat(self.m)
         # TODO figure out sampling and sizes! 
         D = jnp.zeros((self.m*self.n,2))
@@ -199,7 +199,8 @@ class npl():
       # param_range = (jnp.array([-1., -1., -1., -10.]), jnp.array([4., 4., 4., -2.]))
       param_range = (jnp.array([-1., -1., -10.]), jnp.array([4., 4., -2.]))
       lower, upper = param_range
-      params = jax.random.uniform(subkey, minval=lower, maxval=upper, shape=(self.p,))
+      params = jax.random.uniform(key1, minval=lower, maxval=upper, shape=(self.p,))
+      del key1
       # params = self.find_initial_params()[0]
       # initial_guess = [0, 0, 0]
       # params, _ = curve_fit(nonlinear_model, self.data[:,0], self.data[:,1], p0=initial_guess)
@@ -210,14 +211,15 @@ class npl():
       smallest_loss = 1000000
       best_theta = get_params(opt_state)
 
-      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], subkey)
-      #TODO: try resampling DataSet and xsample within the optimisiation loop - split subkey!
-
+      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)
+      del key2
+      
+      key3, *rng_inputs3 = jax.random.split(key3, num=Nstep + 1)
+      del key3
+      
       for i in range(Nstep):
-        key1, subkey = jax.random.split(key1)
         # update gradient
-        key2, subkey = jax.random.split(key2)
-        value, opt_state = step(next(itercount), opt_state, DataSet, xsample, subkey)
+        value, opt_state = step(next(itercount), opt_state, DataSet, xsample, rng_inputs3[i])
         # Update smallest loss and best theta value if loss has decreased - fast version for JAX
         pred =  value < smallest_loss # Prediction is that current value of loss is smaller than smallest_loss
         def true_func(args): # if pred is true update smallest_loss and best_theta
