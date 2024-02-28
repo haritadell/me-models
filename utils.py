@@ -87,7 +87,7 @@ def tls(X,y):
     a_tls = - Vxy  / Vyy # total least squares soln
     b_tls = jnp.mean(y) - a_tls*jnp.mean(X)
     
-    return jnp.array([a_tls[0], b_tls[0]]) 
+    return jnp.array([b_tls[0], a_tls[0]]) 
 
 
 def run_odr(data):
@@ -95,12 +95,12 @@ def run_odr(data):
   lr.fit(data[:,0].reshape(-1, 1), data[:,1].reshape(-1, 1))
   ww = lr.coef_
   bb = lr.intercept_
-  ols_params = np.array([ww[0][0],bb[0]]) 
+  #ols_params = np.array([ww[0][0],bb[0]]) 
   def f(B, x):
-    return B[0]*(x) + B[1]
+    return B[0] + B[1]*(x)
   linear = odr.Model(f)
   mydata = odr.Data(data[:,0], data[:,1])
-  myodr = odr.ODR(mydata, linear, beta0=[ww[0][0],bb[0]]) 
+  myodr = odr.ODR(mydata, linear, beta0=[bb[0], ww[0][0]]) 
   myoutput = myodr.run()
   return myoutput
 
