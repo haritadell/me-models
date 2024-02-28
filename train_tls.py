@@ -27,7 +27,7 @@ def train_tls(params, reg_func, seed):
     npl_.draw_samples()
     t1 = time.time()
     total = t1-t0
-    sample = npl_.sample
+    sample = npl_.sample_odr
     return sample, data, x
 
 n = np.array([200])
