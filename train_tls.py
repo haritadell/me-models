@@ -1,4 +1,4 @@
-from utils import sample_observed_data_berkson, sample_observed_data_classical, mse
+from utils import sample_observed_data_berkson, sample_observed_data_classical, mse, run_odr
 import time
 from npl_tls import npl_tls
 import numpy as np
@@ -13,7 +13,7 @@ parser.add_argument('seed', type=int)
 args = parser.parse_args()
 
 args.seed
-folder_path = '/dcs/pg23/u1604520/mem/results/linear_classical/'
+folder_path = '/dcs/pg23/u1604520/mem/results/linear_classical/new/'
 
 def reg_func(theta,x):
     return theta[0] + theta[1]*x
@@ -22,17 +22,18 @@ def train_tls(params, reg_func, seed):
     n,loc_x,scale_x,scale_nu,scale_eps,B,c,T = params
     theta_star = np.array([1,2])
     data, x = sample_observed_data_classical(reg_func, int(n), loc_x, scale_x, scale_nu, scale_eps, theta_star, seed)
-    npl_ = npl_tls(data,int(B),c, T, seed, prior=np.array([scale_nu, 1.0]))  #np.array([scale_nu, 1.0])
+    #print(run_odr(data).beta)
+    npl_ = npl_tls(data,int(B),c, T, seed, prior=np.array([scale_nu, 2.0]))  #np.array([scale_nu, 1.0])
     t0 = time.time()
     npl_.draw_samples()
     t1 = time.time()
     total = t1-t0
-    sample = npl_.sample_odr
+    sample = npl_.sample_odr  #odr
     return sample, data, x
 
-n = np.array([200])
-loc_x = np.array([0])
-scale_x = np.array([1])
+n = np.array([100])
+loc_x = np.array([10])
+scale_x = np.array([2])
 scale_nu = np.array([0.000001, 0.5, 1, 2]) # Specify different values of stadnard deviation of ME (try as many as you want)
 scale_eps = np.array([0.5])  # True value of \sigma^2_{\epsilon}
 B = np.array([200])
@@ -68,7 +69,7 @@ if __name__=='__main__':
             # mses[1,:] = np.asarray((coefs-theta_star))**2
             #print(mses)
             # np.savetxt(folder_path+f'mses_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed{args.seed}.txt', mses)
-            np.savetxt(folder_path+f'sample_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed{args.seed}.txt', posterior_samples[:, :, p, r])
+            np.savetxt(folder_path+f'sample_scale_nu{params[3]}_c{params[6]}_n{params[0]}_B{params[5]}_seed{args.seed}.txt', posterior_samples[:, :, p, r])
             #np.savetxt(folder_path+f'data_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed{args.seed}.txt', data)
             #np.savetxt(folder_path+f'x_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed{args.seed}.txt', x)
             
