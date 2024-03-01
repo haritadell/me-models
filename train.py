@@ -60,6 +60,7 @@ if __name__=='__main__':
     coefficients = np.zeros((len(theta_star), num_config, R))
     
     for r in tqdm(range(R)):
+        args.seed1 += 1
         args.seed2 += 1
         for p,params in enumerate(list(product(n,loc_x,scale_x,scale_nu,scale_eps,B,m,c,T,p_))):
             sample, data, x = train_npl(np.array(params), reg_func, args.seed1, args.seed2)
