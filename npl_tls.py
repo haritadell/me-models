@@ -41,7 +41,7 @@ class npl_tls():
 
     def draw_single_sample(self,i): 
         """ Draws a single sample from the NPL posterior"""
-        generator = np.random.default_rng(self.seed+i)
+        generator = np.random.default_rng(self.seed*100+i)
         dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), np.array([1])]) # parameters for sampling weights from the Dirichlet distribution
         weights = dirichlet.rvs(dir_params, size=(self.n,), random_state=generator) # (1,101)  sample weights
         #weights_resized = (1/self.n)*jnp.sqrt(jnp.transpose(weights).flatten()) # sqrt of weights #.repeat(self.n) 
