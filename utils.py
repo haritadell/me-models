@@ -5,6 +5,7 @@ import jax.numpy.linalg as la
 import scipy.stats as stats
 from sklearn.linear_model import LinearRegression
 import scipy.odr as odr
+import pandas as pd
 
 def sample_observed_data_berkson(reg_func, n,loc_x, scale_x, scale_nu, scale_eps, theta, seed):
     """Function to sample observations with Berkson measurement error."""
@@ -112,3 +113,17 @@ def run_ols(data):
   ols_params = np.array([ww[0][0],bb[0]])
   return ols_params
 
+def cars_dataset(path_to_csv_file, scale_nu, seed):
+    gen = np.random.default_rng(seed=seed)
+    df = pd.read_csv(path_to_csv_file)
+    w = np.array([df["speed"]]).flatten()
+    y = np.array([df["dist"]]).flatten()
+    # Generate ME and true covariates
+    nu = stats.norm.rvs(loc=0, scale=scale_nu, size=(len(w),), random_state=gen) # ME
+    x = w + nu # True covariates
+    data = np.zeros((len(w), 2))
+    data[:,0] = w
+    data[:,1] = y
+    return data, x 
+ 
+    
