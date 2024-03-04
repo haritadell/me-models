@@ -53,8 +53,6 @@ class npl():
         if self.ly == -1:
             self.ly = np.sqrt((1/2)*np.median(distance.cdist(self.data[:,1].reshape((self.n,1)),self.data[:,1].reshape((self.n,1)),'sqeuclidean')))
         self.prior = prior   # prior is either (2, ) for classical or (1, ) for Berkson
-        self.w_groups, self.group_sizes = np.unique(self.data[:,0], return_counts=True)
-        self.num_groups = len(self.w_groups)
         self.me_type = me_type
         self.generator = np.random.default_rng(seed=self.seed)
         
@@ -88,29 +86,28 @@ class npl():
         """Draws B samples from the nonparametric posterior"""
 
         # Sample Dirichlet weights for each bootstrap iteration
-        weights = np.zeros((self.B, self.num_groups, self.T+self.group_sizes[0]))
-        for i in range(self.num_groups):
-          self.seed += 1
-          group_size = self.group_sizes[i]
-          dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), np.ones(group_size)])
-          weights_i = dirichlet.rvs(dir_params, size=(self.B,), random_state=self.generator)
-          weights[:,i,:] = weights_i
+        # weights = np.zeros((self.B, self.n, self.T+1))
+        # for i in range(self.n):
+        #   dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), jnp.array([1])])
+        #   weights_i = dirichlet.rvs(dir_params, size=(self.B,), random_state=self.generator)
+        #   weights[:,i,:] = weights_i
+        dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), np.array([1])])
+        weights = dirichlet.rvs(dir_params, size=(self.B,self.n), random_state=self.generator)
         
         #weights = np.repeat(weights[:, np.newaxis, :], self.num_groups, axis=1) # BxnxT
 
         # Sample pseudo-data from prior centering measure
         if self.me_type == 'berkson':
-          x_tilde = multivariate_normal.rvs(self.w_groups, (self.prior**2)*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.generator) # shape BxTxn self.prior
+          x_tilde = multivariate_normal.rvs(self.data[:,0], (self.prior**2)*np.eye(self.n), size=(self.B,self.T), random_state=self.generator) # shape BxTxn self.prior
           # x_tilde = multivariate_t.rvs(df=2, loc=self.w_groups, size=(self.B,self.T), random_state=self.generator) # shape BxTxn
         elif self.me_type == 'classical':   # Here I have assumed prior mean for x is 0 for simplicity
           post_var = 1/((1/self.prior[0]**2) + (1/self.prior[1]**2))   
           post_mean = 0*(self.prior[0]**2)/(self.prior[1]**2 + self.prior[0]**2) + (self.data[:,0]*(self.prior[1]**2)/(self.prior[1]**2 + self.prior[0]**2))
-          x_tilde = multivariate_normal.rvs(post_mean, post_var*np.eye(self.num_groups), size=(self.B,self.T), random_state=self.generator)
+          x_tilde = multivariate_normal.rvs(post_mean, post_var*np.eye(self.n), size=(self.B,self.T), random_state=self.generator)
         else: 
            print('Unknown measurement error type!')
            exit()
            
-
         key = jax.random.PRNGKey(self.seed)
         # Split random key into B keys
         key, *subkeys = jax.random.split(key, num=self.B+1) #B,
@@ -144,7 +141,7 @@ class npl():
 
         return best_init_params 
 
-    def minimise_MMD(self, data, weights, x_tilde, key, Nstep=700, eta=0.01):  #0.1
+    def minimise_MMD(self, data, weights, x_tilde, key, Nstep=700, eta=0.01):  #0.01 in class
       """Function to minimise the MMD using adam optimisation from jax"""
       # eta: learning rate
       # Nstep: number of gradient steps
@@ -173,20 +170,21 @@ class npl():
       def take_sample(w, x, y, key):
         """For one data point (x_i, y_i) draw samples from the corresponding DP"""
         
-        repeated = jnp.repeat(self.w_groups, self.group_sizes)
-        x = jnp.concatenate([x,repeated.reshape((self.group_sizes[0],self.num_groups))]) # Size of x is (T+1) x n
-        group_size = jnp.shape(w)[1] - self.T
+        # repeated = jnp.repeat(self.w_groups, self.group_sizes)
+        # x = jnp.concatenate([x,repeated.reshape((self.group_sizes[0],self.num_groups))]) # Size of x is (T+1) x n
+        # group_size = jnp.shape(w)[1] - self.T
+        x = jnp.concatenate([x,self.data[:,0].reshape((1,self.n))])
 
         def sample(w,x,key):
             # Pick (x_i, y_i) from size T+1 with corresponding weights
-            inds1 = jax.random.choice(key, a=self.T+group_size, shape=(group_size,self.m), p=w)  # weights are of size nx(T+1)
+            inds1 = jax.random.choice(key, a=self.T+1, shape=(self.m,), p=w)  # weights are of size nx(T+1)
             key, subkey = jax.random.split(key) # split the key for second draw
-            inds2 = jax.random.choice(subkey, a=self.T+group_size, shape=(group_size,self.m), p=w)
+            inds2 = jax.random.choice(subkey, a=self.T+1, shape=(self.m,), p=w)
             x1 = jnp.take(a=x, indices=inds1.squeeze())
             x2 = jnp.take(a=x, indices=inds2.squeeze())
             return x1, x2
 
-        key, *rng_inputs = jax.random.split(key, self.num_groups+1)
+        key, *rng_inputs = jax.random.split(key, self.n+1)
         xs1, xs2 = vmap(sample, in_axes=(0,1,0))(w,x,jnp.array(rng_inputs)) # vmap over the second dimension of size n
         y = y.repeat(self.m)
         # TODO figure out sampling and sizes! 
@@ -198,7 +196,7 @@ class npl():
       # Initialization of theta for optimisation: here you can start from a fixed point or uniformly sample from a range of values
       #params = jnp.array([0.,4.,-2.]) # last parameter is variance of error on y and we have reparametrised it
       # param_range = (jnp.array([-1., -1., -1., -10.]), jnp.array([4., 4., 4., -2.]))
-      param_range = (jnp.array([-1., -1., -10.]), jnp.array([4., 4., -2.]))
+      param_range = (jnp.array([0., 0., -10.]), jnp.array([4., 4., -2.]))
       lower, upper = param_range
       params = jax.random.uniform(key1, minval=lower, maxval=upper, shape=(self.p,))
       del key1
@@ -212,7 +210,8 @@ class npl():
       smallest_loss = 1000000
       best_theta = get_params(opt_state)
 
-      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)
+      #key2, *rng_inputs2 = jax.random.split(key2, num=Nstep + 1)
+      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)  #rng_inputs2[i]
       del key2
       
       key3, *rng_inputs3 = jax.random.split(key3, num=Nstep + 1)
