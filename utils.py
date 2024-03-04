@@ -7,15 +7,14 @@ from sklearn.linear_model import LinearRegression
 import scipy.odr as odr
 import pandas as pd
 
-def sample_observed_data_berkson(reg_func, n,loc_x, scale_x, scale_nu, scale_eps, theta, seed):
+def sample_observed_data_berkson(reg_func, n,loc_x, scale_x, scale_nu, scale_eps, theta, seed, type_w='random'):
     """Function to sample observations with Berkson measurement error."""
 
-    # You can either sample equidistant points or from a normal distribution
-    # TODO: Sample multiple values of (x,y) for each w (group)
-    # w = np.linspace(0,5,num=int(n/5))
-    # w = np.repeat(w, 5)
     gen = np.random.default_rng(seed=seed)
-    w = stats.norm.rvs(loc=loc_x, scale=scale_x, size=(n,), random_state=gen) # covariates with Berkson ME
+    if type_w == 'random':
+        w = stats.norm.rvs(loc=loc_x, scale=scale_x, size=(n,), random_state=gen) # covariates with Berkson ME
+    elif type_w == 'equidistant':
+        w = np.linspace(0,10,num=n)
     nu = stats.norm.rvs(loc=0, scale=scale_nu, size=(n,), random_state=gen) # ME
     x = w + nu # True covariates
     eps = stats.norm.rvs(loc=0, scale=scale_eps, size=(n,), random_state=gen) # Outcome variable (Y) error
