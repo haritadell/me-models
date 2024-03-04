@@ -144,7 +144,7 @@ class npl():
 
         return best_init_params 
 
-    def minimise_MMD(self, data, weights, x_tilde, key, Nstep=700, eta=0.01):  #0.1
+    def minimise_MMD(self, data, weights, x_tilde, key, Nstep=700, eta=0.01):  #0.01
       """Function to minimise the MMD using adam optimisation from jax"""
       # eta: learning rate
       # Nstep: number of gradient steps
@@ -197,7 +197,7 @@ class npl():
 
       # Initialization of theta for optimisation: here you can start from a fixed point or uniformly sample from a range of values
       #params = jnp.array([0.,4.,-2.]) # last parameter is variance of error on y and we have reparametrised it
-      param_range = (jnp.array([-1., -1., -1., -10.]), jnp.array([4., 4., 4., -2.]))
+      param_range = (jnp.array([0., 0., 0., -10.]), jnp.array([3., 3., 3., -2.]))
       #param_range = (jnp.array([-1., -1., -10.]), jnp.array([4., 4., -2.]))
       lower, upper = param_range
       params = jax.random.uniform(key1, minval=lower, maxval=upper, shape=(self.p,))
@@ -212,7 +212,8 @@ class npl():
       smallest_loss = 1000000
       best_theta = get_params(opt_state)
 
-      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)
+      #DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)
+      key2, *rng_inputs2 = jax.random.split(key2, num=Nstep + 1)
       del key2
       
       key3, *rng_inputs3 = jax.random.split(key3, num=Nstep + 1)
@@ -220,6 +221,7 @@ class npl():
       
       for i in range(Nstep):
         # update gradient
+        DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], rng_inputs2[i])
         value, opt_state = step(next(itercount), opt_state, DataSet, xsample, rng_inputs3[i])
         # Update smallest loss and best theta value if loss has decreased - fast version for JAX
         pred =  value < smallest_loss # Prediction is that current value of loss is smaller than smallest_loss
