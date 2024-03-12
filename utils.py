@@ -124,5 +124,17 @@ def cars_dataset(path_to_csv_file, scale_nu, seed):
     data[:,0] = w
     data[:,1] = y
     return data, x 
+
+def process_csv(path_to_csv_file):
+    df = pd.read_csv(path_to_csv_file)
+    df = df.dropna()
+    w = np.array([df["avg_income"]]).flatten()
+    y = np.array([df["score"]]).flatten()
+    x = np.array([df["income"]]).flatten()
+    data = np.zeros((len(w), 2))
+    data[:,0] = w
+    data[:,1] = y
+    return data, x 
+    
  
     
