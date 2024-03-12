@@ -52,6 +52,7 @@ class npl():
             self.lx = np.sqrt((1/2)*np.median(distance.cdist(self.data[:,0].reshape((self.n,1)),self.data[:,0].reshape((self.n,1)),'sqeuclidean')))
         if self.ly == -1:
             self.ly = np.sqrt((1/2)*np.median(distance.cdist(self.data[:,1].reshape((self.n,1)),self.data[:,1].reshape((self.n,1)),'sqeuclidean')))
+        #print(self.lx, self.ly)
         self.prior = prior   # prior is either (2, ) for classical or (1, ) for Berkson
         self.me_type = me_type
         self.generator = np.random.default_rng(seed=self.seed)
