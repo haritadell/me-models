@@ -12,7 +12,8 @@ import scipy.odr as odr
 from jax.example_libraries import optimizers
 import math
 import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
+#from scipy.optimize import curve_fit
+from jaxfit import CurveFit as CurveFit
 from utils import k_jax
 
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE']='false'
@@ -145,7 +146,7 @@ class npl():
 
         return best_init_params 
 
-    def minimise_MMD(self, data, weights, x_tilde, key, Nstep=700, eta=0.01):  #0.01
+    def minimise_MMD(self, data, weights, x_tilde, key, Nstep=700, eta=0.01): 
       """Function to minimise the MMD using adam optimisation from jax"""
       # eta: learning rate
       # Nstep: number of gradient steps
@@ -199,14 +200,19 @@ class npl():
 
       # Initialization of theta for optimisation: here you can start from a fixed point or uniformly sample from a range of values
       #params = jnp.array([0.,4.,-2.]) # last parameter is variance of error on y and we have reparametrised it
-      param_range = (jnp.array([0., 0., 0., -10.]), jnp.array([3., 3., 3., -2.]))
-      #param_range = (jnp.array([-1., -1., -10.]), jnp.array([4., 4., -2.]))
+      #param_range = (jnp.array([500., 0., -1., -10.]), jnp.array([700., 4., 1., -2.]))
+      cf = CurveFit()
+      params, _ = cf.curve_fit(nonlinear_model, self.data[:,0], self.data[:,1], p0=[0,0,0])
+      param_range = (jnp.array([params[0] - 3, params[1] - 0.2 , params[2] - 0.2, -10.]), jnp.array([params[0] + 3, params[1] + 0.2, params[2] + 0.2 , -2.]))
       lower, upper = param_range
       params = jax.random.uniform(key1, minval=lower, maxval=upper, shape=(self.p,))
+      params = params.at[-1].set(-5.)
+      #params = jnp.concatenate([jnp.array(params), jnp.array([-5])])
       del key1
       # params = self.find_initial_params()[0]
-      # initial_guess = [0, 0, 0]
-      # params, _ = curve_fit(nonlinear_model, self.data[:,0], self.data[:,1], p0=initial_guess)
+      #initial_guess = [0, 0, 0]
+      # cf = CurveFit()
+      # params, _ = cf.curve_fit(nonlinear_model, self.data[:,0], self.data[:,1])
       # params = jnp.concatenate([jnp.array(params), jnp.array([-5])])
       #print(params)
       opt_state = opt_init(params) # initialise theta at params
@@ -214,8 +220,8 @@ class npl():
       smallest_loss = 1000000
       best_theta = get_params(opt_state)
 
-      #DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)
-      key2, *rng_inputs2 = jax.random.split(key2, num=Nstep + 1)
+      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)
+      #key2, *rng_inputs2 = jax.random.split(key2, num=Nstep + 1)
       del key2
       
       key3, *rng_inputs3 = jax.random.split(key3, num=Nstep + 1)
@@ -223,7 +229,7 @@ class npl():
       
       for i in range(Nstep):
         # update gradient
-        DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], rng_inputs2[i])
+        #DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], rng_inputs2[i])
         value, opt_state = step(next(itercount), opt_state, DataSet, xsample, rng_inputs3[i])
         # Update smallest loss and best theta value if loss has decreased - fast version for JAX
         pred =  value < smallest_loss # Prediction is that current value of loss is smaller than smallest_loss
@@ -238,5 +244,6 @@ class npl():
             return smallest_loss, best_theta
         # Updates smallest loss and best theta if prediction (pred) is correct / if pred is true call true_fanc o/w call false_func
         smallest_loss, best_theta = jax.lax.cond(pred, true_func, false_func, [value, smallest_loss, best_theta, opt_state])
+        #print(best_theta)
 
       return  jnp.array([best_theta[0:-1]])
