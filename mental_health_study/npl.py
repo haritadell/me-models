@@ -42,6 +42,7 @@ class npl_class():
         self.lx = lx
         self.ly = ly
         self.prior = prior
+        self.generator = np.random.default_rng(seed=self.seed)
         if self.lx == -1:
             self.lx = np.sqrt((1/2)*np.median(distance.cdist(self.data[:,0].reshape((self.n,1)),self.data[:,0].reshape((self.n,1)),'sqeuclidean')))
         if self.ly == -1:
@@ -91,12 +92,12 @@ class npl_class():
     def draw_samples(self):
         """Draws B samples from the nonparametric posterior"""
         dir_params = np.concatenate([(self.c/self.T)*np.ones(self.T), np.array([1])])
-        weights = dirichlet.rvs(dir_params, size=(self.B,self.n), random_state=self.seed)
+        weights = dirichlet.rvs(dir_params, size=(self.B,self.n), random_state=self.generator)
         # Here self.prior is prior variance of marginal distribution of X
         post_var = 1/((1/self.prior**2) + (1/0.35))   
         post_mean = 0.35/(self.prior**2 + 0.35)*0 + (self.prior**2/(0.35 + self.prior**2))*self.data[:,0]
-        x_tilde = multivariate_normal.rvs(post_mean, post_var*np.eye(self.n), size=(self.B,self.T), random_state=self.seed)
-        key = jax.random.PRNGKey(113)
+        x_tilde = multivariate_normal.rvs(post_mean, post_var*np.eye(self.n), size=(self.B,self.T), random_state=self.generator)
+        key = jax.random.PRNGKey(self.seed)
         key, *subkeys = jax.random.split(key, num=self.B+1)
         # init_params = vmap(self.best_init_params)(jnp.arange(self.B)).reshape((self.B,65))
         # print(init_params.shape)
@@ -104,12 +105,12 @@ class npl_class():
         self.sample = np.array(samples) 
         self.knots_sample = np.array(knots_samples)
 
-    def best_init_params(self,i):
+    def best_init_params(self, key):
         """Function to find optimisation starting point"""
         
         def sample_theta_init(rng):
-          lower_b = jnp.concatenate([jnp.array([0, 0, 0, 0]),(-0.1)*jnp.ones(30), (-0.1)*jnp.ones(30),jnp.array([-10])]) 
-          upper_b = jnp.concatenate([jnp.array([2, 2, 1, 1]),(0.1)*jnp.ones(30), (0.1)*jnp.ones(30),jnp.array([-1])])
+          lower_b = jnp.concatenate([jnp.array([-1, -1, -1, -1]),(-0.5)*jnp.ones(30), (-0.5)*jnp.ones(30),jnp.array([-10])]) #0-2, -0.1-0.1
+          upper_b = jnp.concatenate([jnp.array([4, 4, 4, 4]),(0.5)*jnp.ones(30), (0.5)*jnp.ones(30),jnp.array([-1])])
           param_range = (lower_b, upper_b) 
           lower, upper = param_range
           params = jax.random.uniform(rng, minval=lower, maxval=upper, shape=lower.shape)
@@ -118,34 +119,31 @@ class npl_class():
           # params = params.at[-1].set(jax.random.uniform(rng, minval=-10, maxval=-1))
           return params  
 
-        n_initial_locations = 1000
+        n_initial_locations = 100 #1000
         n_optimized_locations = 1
 
-        rng = jax.random.PRNGKey((i+1)**3)
-        rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
-        init_thetas = vmap(sample_theta_init)(jnp.array(rng_inputs))
-        rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
+        key, *rng_inputs = jax.random.split(key, num=n_initial_locations*3 + 1)
+        init_thetas = vmap(sample_theta_init)(jnp.array(rng_inputs[:n_initial_locations]))
+        #rng, *rng_inputs = jax.random.split(rng, num=n_initial_locations + 1)
         
         K = 30
         knots = vmap(create_knots, in_axes=(None,None,0))(self.data[:,0],K,jnp.arange(K))
         init_losses = []
-        for t in init_thetas:
-            rng, subrng = jax.random.split(rng)
-            inds = jax.random.choice(rng, a=self.n, shape=(self.n,), p=(1/self.n)*jnp.ones(self.n))
+        for i, t in enumerate(init_thetas):
+            inds = jax.random.choice(rng_inputs[n_initial_locations+i], a=self.n, shape=(self.n,), p=(1/self.n)*jnp.ones(self.n))
             xsample = jnp.take(a=self.data[:,0], indices=inds)
-            init_losses.append(self.loss(subrng,t,self.data,self.data[:,0],knots)) #xsample
+            init_losses.append(self.loss(rng_inputs[2*n_initial_locations+i],t,self.data,self.data[:,0],knots)) #xsample
 
-        rng, *rng_inputs = jax.random.split(rng, num=n_optimized_locations + 1)
         best_init_params = init_thetas[jnp.argsort(jnp.asarray(init_losses))[:n_optimized_locations]]
 
         return best_init_params
 
-    def minimise_MMD(self, data, weights, x_tilde, key, ind, Nstep=400, eta=0.001): #0.1  
+    def minimise_MMD(self, data, weights, x_tilde, key, ind, Nstep=700, eta=0.001): #0.1  
       """Function to minimise the MMD using adam optimisation from jax"""
       # eta: learning rate
       # Nstep: number of gradient steps
 
-      key, subkey, key1, key2 = jax.random.split(key, num=3 + 1)
+      key, key1, key2, key3, key4 = jax.random.split(key, num=4 + 1)
       config.update("jax_enable_x64", True)
 
       # objective function to feed the optimizer
@@ -190,7 +188,7 @@ class npl_class():
         return D, xs2.flatten()
 
       # Initialization of theta for optimisation
-      params = self.best_init_params(self.seed)
+      params = self.best_init_params(key1) #jax.random.PRNGKey(self.seed)
       # lower_b = jnp.concatenate([jnp.array([-1., -1., -1., -1.]),(-1)*jnp.ones(60),jnp.array([-10])]) 
       # upper_b = jnp.concatenate([jnp.array([1., 1., 1., 1.]),(1)*jnp.ones(60),jnp.array([-1])])
       # param_range = (lower_b, upper_b) 
@@ -204,20 +202,18 @@ class npl_class():
       list_of_thetas = jnp.zeros((n_optimized_locations,65)) 
       list_of_knots = jnp.zeros((n_optimized_locations,30))  
 
-      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], subkey)
+      DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)
+      key3, *rng_inputs3 = jax.random.split(key3, num=Nstep + 1)
       
       for j in range(n_optimized_locations):
         opt_state = opt_init(params[j,:]) 
         smallest_loss = 1000
         best_theta = get_params(opt_state)
         for i in range(Nstep):    
-          key1, subkey = jax.random.split(key1)
-          
           # compute and save knots once for this particular xsample
           knots = vmap(create_knots, in_axes=(None,None,0))(xsample,K,jnp.arange(K))
           # update  
-          key2, subkey = jax.random.split(key2)
-          value, opt_state = step(next(itercount), opt_state, DataSet, xsample, knots, subkey) 
+          value, opt_state = step(next(itercount), opt_state, DataSet, xsample, knots, rng_inputs3[i]) 
           pred =  value < smallest_loss
           def true_func(args):
               value, smallest_loss, best_theta, opt_state, knots, knots_b = args[0], args[1], args[2], args[3], args[4], args[5]
@@ -230,15 +226,13 @@ class npl_class():
               smallest_loss = jnp.array(smallest_loss, dtype='float64')
               return smallest_loss, best_theta, knots_b
           smallest_loss, best_theta, knots_b = jax.lax.cond(pred, true_func, false_func, [value, smallest_loss, best_theta, opt_state, knots, knots_b])
-          print(best_theta[:4])
+          #print(best_theta[:4])
               
         list_of_thetas = list_of_thetas.at[j,:].set(best_theta)
         list_of_knots = list_of_knots.at[j,:].set(knots_b)
       DataSet, x_to_use = take_sample(weights,x_tilde,self.data[:,1],key1)  
       losses = []
-      seed = 12
-      rng = jax.random.PRNGKey(seed)
-      rng, *rng_inputs = jax.random.split(rng, num=n_optimized_locations + 1)
+      rng, *rng_inputs = jax.random.split(key4, num=n_optimized_locations + 1)
   
       for l,t in enumerate(list_of_thetas):
          losses.append(self.loss(jnp.array(rng_inputs)[l,:],t,DataSet, DataSet[:,0],list_of_knots[l,:]))
