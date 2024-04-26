@@ -20,13 +20,12 @@ folder_path = '/dcs/pg23/u1604520/mem/results/exponential_classical_unifstart/ne
 
 def reg_func(theta,x):
     return (np.exp(theta[0] + theta[1]*x))/(1 + np.exp(theta[0] + theta[1]*x))
-#(np.exp(theta[0] + theta[1]*x))/(1 + np.exp(theta[0] + theta[1]*x))  #theta[0] + theta[1]*x + theta[2]*x**2
 
 def train_npl(params, reg_func, seed1, seed2):
     n,loc_x,scale_x,scale_nu,scale_eps,B,m,c,T,p_ = params
-    theta_star = np.array([1,2])
-    data, x = sample_observed_data_classical(reg_func, int(n), loc_x, scale_x, scale_nu, scale_eps, theta_star, seed1) #, type_w='random'
-    npl_ = npl(data,int(B),int(m), c, T, int(p_), seed2, lx=100, ly=100, prior=np.array([0.2, 1.0]), me_type='classical')  #100100np.array([scale_nu, 1.0])
+    theta_star = np.array([1,2]) 
+    data, x = sample_observed_data_classical(reg_func, int(n), loc_x, scale_x, scale_nu, scale_eps, theta_star, seed1) 
+    npl_ = npl(data,int(B),int(m), c, T, int(p_), seed2, lx=100, ly=100, prior=np.array([0.2, 1.0]), me_type='classical')  #np.array([scale_nu, 1.0])
     t0 = time.time()
     npl_.draw_samples()
     t1 = time.time()
@@ -39,9 +38,6 @@ def train_npl(params, reg_func, seed1, seed2):
 # Define a nonlinear model function 
 def nonlinear_model(x, a, b):
     return (np.exp(a + b*x))/(1 + np.exp(a + b*x)) 
-
-# def nonlinear_model(x, a, b, c):
-#     return a + b*x + c*x**2 
 
 n = np.array([200])
 loc_x = np.array([0])
@@ -76,20 +72,8 @@ if __name__=='__main__':
             posterior_samples[:, :, p, r] = sample.reshape((int(B[0]), len(theta_star)))
             data_sets[:, :, p, r] = data
             x_sets[:, p, r] = x
-            # # Fit the nonlinear model to the data using curve_fit
-            # initial_guess = [0, 4]  # Initial parameter guess
-            # coefs, covariance = curve_fit(nonlinear_model, data[:,0], data[:,1], p0=initial_guess)
-            # coefficients[:, p, r] = coefs
-            # mses = np.zeros((2,len(theta_star)))
-            # stds = np.zeros((2,len(theta_star)))
-            # mses[0,:], stds[0,:] = mse(posterior_samples[:, :, p, r],theta_star)
-            # mses[1,:] = np.asarray((coefs-theta_star))**2
-            #print(mses)
-            # np.savetxt(folder_path+f'mses_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed{args.seed}.txt', mses)
             np.savetxt(folder_path+f'sample_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed1{args.seed1}_seed2{args.seed2}.txt', posterior_samples[:, :, p, r])
-            #np.savetxt(folder_path+f'mmd_est_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed1{args.seed1}_seed2{args.seed2}.txt', mmd_est)
-            #np.savetxt(folder_path+f'data_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed{args.seed}.txt', data)
-            #np.savetxt(folder_path+f'x_scale_nu{params[3]}_c{params[7]}_n{params[0]}_B{params[5]}_seed{args.seed}.txt', x)
+            
             
             
     
