@@ -98,8 +98,8 @@ class npl():
 
         # Sample pseudo-data from prior centering measure
         if self.me_type == 'berkson':
-          x_tilde = multivariate_normal.rvs(self.data[:,0], (self.prior**2)*np.eye(self.n), size=(self.B,self.T), random_state=self.generator) # shape BxTxn self.prior
-          # x_tilde = multivariate_t.rvs(df=2, loc=self.w_groups, size=(self.B,self.T), random_state=self.generator) # shape BxTxn
+          #x_tilde = multivariate_normal.rvs(self.data[:,0], (self.prior**2)*np.eye(self.n), size=(self.B,self.T), random_state=self.generator) # shape BxTxn self.prior
+          x_tilde = multivariate_t.rvs(df=3, loc=self.data[:,0], size=(self.B,self.T), random_state=self.generator) # shape BxTxn
         elif self.me_type == 'classical':   # Here I have assumed prior mean for x is 0 for simplicity
           post_var = 1/((1/self.prior[0]**2) + (1/self.prior[1]**2))   
           post_mean = 0*(self.prior[0]**2)/(self.prior[1]**2 + self.prior[0]**2) + (self.data[:,0]*(self.prior[1]**2)/(self.prior[1]**2 + self.prior[0]**2))
@@ -196,7 +196,7 @@ class npl():
       # Initialization of theta for optimisation: here you can start from a fixed point or uniformly sample from a range of values
       #params = jnp.array([0.,4.,-2.]) # last parameter is variance of error on y and we have reparametrised it
       # param_range = (jnp.array([-1., -1., -1., -10.]), jnp.array([4., 4., 4., -2.]))
-      param_range = (jnp.array([0., 0., -10.]), jnp.array([4., 4., -2.]))
+      param_range = (jnp.array([-1., -1., -10.]), jnp.array([4., 4., -2.]))
       lower, upper = param_range
       params = jax.random.uniform(key1, minval=lower, maxval=upper, shape=(self.p,))
       del key1
