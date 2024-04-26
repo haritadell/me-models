@@ -1,7 +1,8 @@
 #!/bin/bash
 #
-#SBATCH --job-name=classical-unif # Job name for tracking
+#SBATCH --job-name=class # Job name for tracking
 #SBATCH --partition=gecko  # Partition you wish to use (see above for list)
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=40     # Number of CPU threads used by your job, set this upto 40 as required.
 #SBATCH --mem=60000            # 60GB RAM
 #SBATCH --exclusive=mcs        # Exclusive mode, only this job will run
@@ -12,4 +13,4 @@
 #SBATCH --error=joboutput_%j.err  # Standard error from your job
 
 ## Execute your program(s) ##
-srun python /dcs/pg23/u1604520/me-models/train.py 12
+srun python /dcs/pg23/u1604520/me-models/train.py 12 112
