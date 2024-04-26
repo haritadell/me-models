@@ -13,7 +13,7 @@ parser.add_argument('seed', type=int)
 args = parser.parse_args()
 
 args.seed
-folder_path = '/dcs/pg23/u1604520/mem/results/linear_classical/new/'
+folder_path = '/dcs/pg23/u1604520/mem/results/linear_classical/new/misp/'
 
 def reg_func(theta,x):
     return theta[0] + theta[1]*x
@@ -23,7 +23,7 @@ def train_tls(params, reg_func, seed):
     theta_star = np.array([1,2])
     data, x = sample_observed_data_classical(reg_func, int(n), loc_x, scale_x, scale_nu, scale_eps, theta_star, seed)
     #print(run_odr(data).beta)
-    npl_ = npl_tls(data,int(B),c, T, seed, prior=np.array([scale_nu, 2.0]))  #np.array([scale_nu, 1.0])
+    npl_ = npl_tls(data,int(B),c, T, seed, prior=np.array([0.2, 2.0]))  #np.array([scale_nu, 1.0])
     t0 = time.time()
     npl_.draw_samples()
     t1 = time.time()
@@ -37,7 +37,7 @@ scale_x = np.array([2])
 scale_nu = np.array([0.000001, 0.5, 1, 2]) # Specify different values of stadnard deviation of ME (try as many as you want)
 scale_eps = np.array([0.5])  # True value of \sigma^2_{\epsilon}
 B = np.array([200])
-c = np.array([100]) # You can also try different values of c parameter in DP
+c = np.array([1]) # You can also try different values of c parameter in DP
 T = np.array([100]) # Truncated limit of DP sum
 theta_star = np.array([1,2])  # True parameter values
 R = 100
