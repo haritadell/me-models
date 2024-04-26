@@ -109,8 +109,8 @@ class npl_class():
         """Function to find optimisation starting point"""
         
         def sample_theta_init(rng):
-          lower_b = jnp.concatenate([jnp.array([-1, -1, -1, -1]),(-0.5)*jnp.ones(30), (-0.5)*jnp.ones(30),jnp.array([-10])]) #0-2, -0.1-0.1
-          upper_b = jnp.concatenate([jnp.array([4, 4, 4, 4]),(0.5)*jnp.ones(30), (0.5)*jnp.ones(30),jnp.array([-1])])
+          lower_b = jnp.concatenate([jnp.array([0, 0, 0, 0]),(-0.1)*jnp.ones(30), (-0.1)*jnp.ones(30),jnp.array([-10])]) #0-2, -0.1-0.1
+          upper_b = jnp.concatenate([jnp.array([2, 2, 2, 2]),(0.1)*jnp.ones(30), (0.1)*jnp.ones(30),jnp.array([-1])])
           param_range = (lower_b, upper_b) 
           lower, upper = param_range
           params = jax.random.uniform(rng, minval=lower, maxval=upper, shape=lower.shape)
@@ -205,6 +205,7 @@ class npl_class():
       DataSet, xsample = take_sample(weights, x_tilde, self.data[:,1], key2)
       key3, *rng_inputs3 = jax.random.split(key3, num=Nstep + 1)
       
+      # Optimisation loop 
       for j in range(n_optimized_locations):
         opt_state = opt_init(params[j,:]) 
         smallest_loss = 1000
@@ -226,7 +227,6 @@ class npl_class():
               smallest_loss = jnp.array(smallest_loss, dtype='float64')
               return smallest_loss, best_theta, knots_b
           smallest_loss, best_theta, knots_b = jax.lax.cond(pred, true_func, false_func, [value, smallest_loss, best_theta, opt_state, knots, knots_b])
-          #print(best_theta[:4])
               
         list_of_thetas = list_of_thetas.at[j,:].set(best_theta)
         list_of_knots = list_of_knots.at[j,:].set(knots_b)
