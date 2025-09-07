@@ -86,7 +86,7 @@ class npl_tls():
         results_odr = np.zeros((self.B,2)) 
         results_ols = np.zeros((self.B,2))
 
-        temp = Parallel(n_jobs=-1, backend= 'loky')(delayed(self.draw_single_sample)(i) for i in range(self.B))
+        temp = Parallel(n_jobs=-1, backend="threading")(delayed(self.draw_single_sample)(i) for i in range(self.B))
         for i in range(self.B):
             results_odr[i,:] = temp[i] #[1]
             #results_ols[i,:] = temp[i][0]
