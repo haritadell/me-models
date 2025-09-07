@@ -10,6 +10,8 @@
 # Set flag for code compilation (needed if 
 # running script first time in current session) :
 
+mc.cores = parallel::detectCores()
+
 compileCode <- TRUE
 
 # Load required packages:
@@ -33,9 +35,9 @@ ncZ <- 30
 # Load in data:
 
 #data(BCR)
-for (r in 1:100){
+for (r in 1:1){
   cat('######## Now running r = ', r)
-  data_r = read.csv(paste("~/Dropbox/sim_data_bcr/sim_data_bcr_", r, ".csv", sep=""))
+  data_r = read.csv(paste("./mh_study/sim_data_bcr/sim_data_bcr_", r, ".csv", sep=""))
   w <- data_r$w   ;   y <- data_r$y
   treatIndic <- as.numeric(as.character(data_r$status) == "treatment")
   n <- length(y)
@@ -147,7 +149,7 @@ for (r in 1:100){
   
   thetas = rbind(betaMCMC, uControlMCMC, uTreatmtMCMC)
   
-  write.table(thetas, paste("~/Dropbox/bcr_sample_", r, ".txt", sep=""))
+  write.table(thetas, paste("./results/mh/bcr_sim_data_bcr/bcr_sample_", r, ".txt"))
   
   ############ End of BCRana ############
   
