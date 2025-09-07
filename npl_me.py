@@ -6,7 +6,7 @@ import scipy.spatial.distance as distance
 import jax.numpy as jnp
 import jax
 from jax import vmap, value_and_grad, jit, pmap
-from jax.config import config
+# from jax.config import config
 from sklearn.linear_model import LinearRegression
 import scipy.odr as odr
 from jax.example_libraries import optimizers
@@ -149,7 +149,7 @@ class npl():
 
       key, key1, key2, key3 = jax.random.split(key, num=3 + 1)
       del key
-      config.update("jax_enable_x64", True)
+      # config.update("jax_enable_x64", True)
 
       # objective function to feed the optimizer
       def obj_fun(theta, Ds, xs, key):
