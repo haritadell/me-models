@@ -6,7 +6,7 @@ import scipy.spatial.distance as distance
 import jax.numpy as jnp
 import jax
 from jax import vmap, value_and_grad, jit, pmap
-from jax.config import config
+from jax import config
 from sklearn.linear_model import LinearRegression
 import scipy.odr as odr
 from jax.example_libraries import optimizers
